@@ -1,0 +1,52 @@
+import numpy as np
+
+
+class SpaceGrid:
+    def __init__(self, N, a, b):
+        self.a = a
+        self.b = b
+        self.N = N
+        self.x = np.linspace(self.a, self.b, self.N + 1)
+        self.dx = (b - a) / N
+
+
+class BoundaryCondition:
+    def __init__(self, type, value):
+        self.type = type
+        self.value = value
+
+
+class construct_A_and_B():
+    def __init__(self, grid, bc_left, bc_right):
+        if bc_left.type & bc_right.type = Dirichlet:
+            self.size = grid.N - 1
+            self.Add = np.eye(self.size, k=-1) + np.eye(self.size, k=1) - 2*np.eye(self.size)
+            self.Bdd = np.zeros(self.size)
+            self.Bdd[0] = bc_left.value
+            self.Bdd[-1] = bc_right.value
+        elif bc_left.type = Dirichlet & bc_right.type = Robin:
+            self.size = grid.N
+            self.Add = np.eye(self.size, k=-1) + np.eye(self.size, k=1) - 2*np.eye(self.size)
+            self.Add[-1, -1] = -2*(1 + bc_right.gamma * grid.dx)
+            self.Add[-1, -2] = 2
+            self.Bdd = np.zeros(self.size)
+            self.Bdd[0] = bc_left.value
+            self.Bdd[-1] = 2 * bc_right.delta * grid.dx
+        elif bc_left.type = Robin && bc_right.type = Dirichlet:
+            self.size = grid.N
+            self.Add = np.eye(self.size, k=-1) + np.eye(self.size, k=1) - 2 * np.eye(self.size)
+            self.Add[1, 1] = -2 * (1 + bc_left.gamma * grid.dx)
+            self.Add[1, 2] = 2
+            self.Bdd = np.zeros(self.size)
+            self.Bdd[0] = 2 * bc_left.delta * grid.dx
+            self.Bdd[-1] = bc_right.value
+        elif bc_left.type & bc_right.type = Robin:
+            self.size = grid.N +1
+            self.Add = np.eye(self.size, k=-1) + np.eye(self.size, k=1) - 2 * np.eye(self.size)
+            self.Add[1, 1] = -2 * (1 + bc_left.gamma * grid.dx)
+            self.Add[1, 2] = 2
+            self.Add[-1, -1] = -2 * (1 + bc_right.gamma * grid.dx)
+            self.Add[-1, -2] = 2
+            self.Bdd = np.zeros(self.size)
+            self.Bdd[0] = 2 * bc_left.delta * grid.dx
+            self.Bdd[-1] = 2 * bc_right.delta * grid.dx
