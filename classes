@@ -11,42 +11,86 @@ class SpaceGrid:
 
 
 class BoundaryCondition:
-    def __init__(self, type, value):
+    def __init__(self, type, value, gamma):
         self.type = type
         self.value = value
+        self.gamma = gamma
 
-
-class construct_A_and_B():
+class ConstructAAndB:
     def __init__(self, grid, bc_left, bc_right):
-        if bc_left.type & bc_right.type = Dirichlet:
+        # First case: both boundary conditions are Dirichlet
+        if bc_left.type == 'Dirichlet' and bc_right.type == 'Dirichlet':
             self.size = grid.N - 1
-            self.Add = np.eye(self.size, k=-1) + np.eye(self.size, k=1) - 2*np.eye(self.size)
+            self.Add = np.eye(self.size, k=-1) + np.eye(self.size, k=1) - 2 * np.eye(self.size)
             self.Bdd = np.zeros(self.size)
             self.Bdd[0] = bc_left.value
             self.Bdd[-1] = bc_right.value
-        elif bc_left.type = Dirichlet & bc_right.type = Robin:
+
+        # Second case: left is Dirichlet, right is Robin
+        elif bc_left.type == 'Dirichlet' and bc_right.type == 'Robin':
             self.size = grid.N
-            self.Add = np.eye(self.size, k=-1) + np.eye(self.size, k=1) - 2*np.eye(self.size)
-            self.Add[-1, -1] = -2*(1 + bc_right.gamma * grid.dx)
+            self.Add = np.eye(self.size, k=-1) + np.eye(self.size, k=1) - 2 * np.eye(self.size)
+            self.Add[-1, -1] = -2 * (1 + bc_right.gamma * grid.dx)
             self.Add[-1, -2] = 2
             self.Bdd = np.zeros(self.size)
             self.Bdd[0] = bc_left.value
             self.Bdd[-1] = 2 * bc_right.delta * grid.dx
-        elif bc_left.type = Robin && bc_right.type = Dirichlet:
+
+        # Third case: left is Robin, right is Dirichlet
+        elif bc_left.type == 'Robin' and bc_right.type == 'Dirichlet':
             self.size = grid.N
             self.Add = np.eye(self.size, k=-1) + np.eye(self.size, k=1) - 2 * np.eye(self.size)
-            self.Add[1, 1] = -2 * (1 + bc_left.gamma * grid.dx)
-            self.Add[1, 2] = 2
+            self.Add[0, 0] = -2 * (1 + bc_left.gamma * grid.dx)  # Note the correct indexing for the first row
+            self.Add[0, 1] = 2
             self.Bdd = np.zeros(self.size)
             self.Bdd[0] = 2 * bc_left.delta * grid.dx
             self.Bdd[-1] = bc_right.value
-        elif bc_left.type & bc_right.type = Robin:
-            self.size = grid.N +1
+
+        # Fourth case: both boundary conditions are Robin
+        elif bc_left.type == 'Robin' and bc_right.type == 'Robin':
+            self.size = grid.N + 1
             self.Add = np.eye(self.size, k=-1) + np.eye(self.size, k=1) - 2 * np.eye(self.size)
-            self.Add[1, 1] = -2 * (1 + bc_left.gamma * grid.dx)
-            self.Add[1, 2] = 2
+            self.Add[0, 0] = -2 * (1 + bc_left.gamma * grid.dx)
+            self.Add[0, 1] = 2
             self.Add[-1, -1] = -2 * (1 + bc_right.gamma * grid.dx)
             self.Add[-1, -2] = 2
             self.Bdd = np.zeros(self.size)
             self.Bdd[0] = 2 * bc_left.delta * grid.dx
             self.Bdd[-1] = 2 * bc_right.delta * grid.dx
+
+class Newtonsmethod:
+    def __init__(self, ConstructAAndB, u, grid, q):
+        self.F = ConstructAAndB.Add @ u + ConstructAAndB.Bdd + (grid.dx**2) * q(u)
+        self.J = ConstructAAndB.Add + (grid.dx**2) * np.diag(np.gradient(u))
+        self.V = np.linalg.solve(self.J, -self.F)
+
+# class q:
+#     def __init__(self, symbols, function):
+#         self.symbols = symbols
+#         self.function = function
+#         self.diff = diff(q.symbols, q.function)
+#
+# class Jq:
+#     def __init__(self, q, u):
+#         self.array = q(u)
+
+
+class ODEbvp:
+    def __init__(self, ConstructAAndB, u, grid, q, Jq):
+        self.F = ConstructAAndB.Add @ u + ConstructAAndB.Bdd + (grid.dx ** 2) * q(u)
+        self.J = ConstructAAndB.Add + (grid.dx ** 2) * np.diag(Jq)
+
+class timegrid:
+    def __init__(self, dt, t_final):
+        self.dt = dt
+        self.t_final = t_final
+        self.N_time = int(t_final / dt)
+        self.t = dt * np.arange(self.N_time + 1)
+
+class implicitEuler:
+    def __init__(self, D, grid, timegrid, ConstructAandB, u, q, fIC):
+        C = D * timegrid.dt / grid.dx**2
+        self.sol = np.zeros((grid.N+1, timegrid.N_time + 1))
+        self.sol[:, 0] = fIC(grid.x)
+        for n in range(timegrid.N_time):
+            self.sol[:, n+1] = np.linalg.solve(np.eye(grid.N + 1) - C @ ConstructAandB.Add, )
