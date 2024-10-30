@@ -1,0 +1,434 @@
+import csv
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+#import tensorflow
+import pandas as pd
+import itertools
+# from tensorflow.keras.models import Sequential
+# from tensorflow.keras.layers import *
+# from tensorflow.keras.callbacks import ModelCheckpoint
+# from tensorflow.keras.losses import MeanSquaredError
+# from tensorflow.keras.metrics import RootMeanSquaredError
+# from tensorflow.keras.optimizers import Adam
+from scipy import stats
+
+
+def get_input(prices, interest, mean):
+    input_list = []
+    for i in range(len(prices)):
+        input_list.append([prices[i], interest[i], mean[i]])
+    return input_list
+
+
+def input_output(input, window_size):
+    inp_mat = []
+    outs = []
+    for i in range(len(input)):
+        if (i + window_size) > len(input) - window_size:
+            pass
+        else:
+            row = [a for a in input[i:i+window_size]]
+            inp_mat.append(row)
+            holder = input[i + window_size]
+            outs.append(holder[0])
+    return np.array(inp_mat), np.array(outs)
+
+def get_zscore(list, tol):
+    zscrs = [0] * len(list)
+    z = np.abs(stats.zscore(list))
+    for i in range(len(list)):
+      if z[i] > tol:
+        zscrs[i] = 1
+    return zscrs
+
+
+csv_file = ['zillowneighborhood.csv', "USmortgates.csv"]
+
+with open(csv_file[0], 'r') as csvfile:
+    reader = csv.reader(csvfile)
+    JCrows = []
+    for row in reader:
+        if len(JCrows) > 10:
+            pass
+        elif row[7] == 'New York-Newark-Jersey City, NY-NJ-PA':
+            del row[0:9]
+            cleaned_row = [float(val) if val.strip() != '' else np.nan for val in row]
+            JCrows.append(cleaned_row)
+
+data_max = 0
+data_min = 99999999999999
+for row in JCrows:
+    for i in row:
+        if i > data_max:
+            data_max = i
+        elif i < data_min:
+            data_min = i
+
+data_scaled = []
+for i in JCrows:
+    data_scaled.append([(j - data_min) / (data_max - data_min) for j in i])
+
+mean_house_prices = np.array(data_scaled)
+mean_house_prices = np.mean(mean_house_prices, axis=0)
+
+inflations = []
+count = 1
+with open(csv_file[1], 'r') as csvfile:
+    reader = csv.reader(csvfile)
+
+    inflations = [row[1] for row in reader]
+    del inflations[0]
+    inflations = inflations[::4]
+    inflations = inflations[0:296]
+    cleaned_infs = [float(val) if val.strip() != '' else np.nan for val in inflations]
+    data_max = 0
+    data_min = 99999999999999
+    for i in cleaned_infs:
+        if i > data_max:
+            data_max = i
+        elif i < data_min:
+            data_min = i
+    inflations = [(j - data_min) / (data_max - data_min) for j in cleaned_infs]
+
+date_range = pd.date_range(start='2000-01-01', end='2024-08-01', freq='MS')
+
+assert len(date_range) == 296, "The date range should match the number of data points."
+
+
+
+plt.figure(figsize=(14, 6))
+i = 0
+for row in data_scaled:
+    row = np.array(row)
+    is_outlier = get_zscore(row, 2)
+    row = [value if out == 0 else np.nan for value, out in zip(row, is_outlier)]
+    row = np.array(row)
+    row_valids = np.where(~np.isnan(row))[0]
+    row_nans = np.where(np.isnan(row))[0]
+    row[row_nans] = np.interp(row_nans, row_valids, row[row_valids])
+    data_scaled[i] = row ##
+    plt.plot(date_range, row)
+    i+=1
+
+is_outlier = get_zscore(mean_house_prices,2)
+mean_house_prices = [value if out == 0 else np.NaN for value, out in zip(mean_house_prices, is_outlier)]
+is_outlier = get_zscore(inflations, 2)
+inflations = [value if out == 0 else np.nan for value, out in zip(inflations, is_outlier)]
+mean_valids = np.where(~np.isnan(mean_house_prices))[0]
+mean_nans = np.where(np.isnan(mean_house_prices))[0]
+mean_house_prices = np.array(mean_house_prices)
+mean_house_prices[mean_nans] = np.interp(mean_nans, mean_valids, mean_house_prices[mean_valids])
+inf_valids = np.where(~np.isnan(inflations))[0]
+inf_nans = np.where(np.isnan(inflations))[0]
+inflations = np.array(inflations)
+inflations[inf_nans] = np.interp(inf_nans, inf_valids, inflations[inf_valids])
+
+plt.plot(date_range, mean_house_prices, linewidth=3.5, color='black')
+plt.plot(date_range, inflations, linestyle=':', color='black', label='Mortgage Interest Rate')
+
+plt.xlabel('Month (01/2000 - 08/2024)')
+plt.ylabel('House Price')
+plt.title(
+    'Average House Price of 10 Neighborhoods in Jersey City, New York Plotted Against US Mortgage Mortgage Interest Rates')
+
+house_prices_line = plt.Line2D([0], [0], color='black', lw=2)
+inflation_line = plt.Line2D([0], [0], color='black', lw=2, linestyle=':')
+mean_line = plt.Line2D([0], [0], color='black', lw=3.5)
+plt.legend([house_prices_line, inflation_line, mean_line], ['House Prices', 'Interest Rate', 'Mean of House Prices'],
+           loc='upper left')
+plt.show()
+
+#print(len(data_scaled[3]))
+x, y = input_output(get_input(data_scaled[0], inflations, mean_house_prices), 4)
+print(len(data_scaled))
+print(len(data_scaled[0]))
+rows, cols = len(data_scaled), len(data_scaled[0])
+xtrain = [None for _ in range(200)]
+
+#print(nested_list[10][295])
+#xtrain=np.zeros(len(data_scaled))
+xtest= [None for _ in range(200,295)]
+predictions = [None for _ in range(200,295)]
+predictions2 = [None for _ in range(200,295)]
+
+#print(xtest)
+
+# print(len(xtrain))
+# print(len(xtest))
+from statsmodels.tsa.arima.model import ARIMA
+
+def arma_predictor(train_data, test_data, order):
+    """
+    Train an ARMA model on the training data and predict on the test data.
+
+    Parameters:
+        train_data (array-like): Time series training data.
+        test_data (array-like): Time series test data.
+        order (tuple): ARMA model order (p, d, q).
+
+    Returns:
+        predictions (array-like): Predicted values for the test data.
+    """
+    # Fit the ARMA model
+    model = ARIMA(train_data, order=order)
+    model_fit = model.fit()
+    #print(model_fit.mle_retvals)
+    # Forecast on test data
+    start = len(train_data)
+    end = start + len(test_data) - 1
+    predictions = model_fit.predict(start=start, end=end, dynamic=False, typ='levels', disp=False)
+
+    return predictions
+
+def arma_predictorSHORT(train_data, test_data, order):
+    """
+    Train an ARMA model on the training data and predict on the test data.
+
+    Parameters:
+        train_data (array-like): Time series training data.
+        test_data (array-like): Time series test data.
+        order (tuple): ARMA model order (p, d, q).
+
+    Returns:
+        predictions (array-like): Predicted values for the test data.
+    """
+    # # Fit the ARMA model
+    # model = ARIMA(train_data, order=order)
+    # model_fit = model.fit()
+    # #print(model_fit.mle_retvals)
+    # # Forecast on test data
+    # start = len(train_data)
+    # end = start + 1
+    predictions=np.zeros(len(test_data))
+    for itera in range(len(xtest)):
+        if itera > 0:
+            train_data = np.append(train_data, test_data[itera - 1])
+        # Fit the ARMA model
+        model = ARIMA(train_data, order=order)
+        model_fit = model.fit()
+        # print(model_fit.mle_retvals)
+        # Forecast on test data
+        # print(type(xtrainnow))
+        # print(f"xtestnow, {xtestnow}")
+        predictions[itera] = model_fit.forecast(steps=1)
+
+
+    return predictions
+
+def arma_predictorMED(train_data, test_data, order):
+    """
+    Train an ARMA model on the training data and predict on the test data.
+
+    Parameters:
+        train_data (array-like): Time series training data.
+        test_data (array-like): Time series test data.
+        order (tuple): ARMA model order (p, d, q).
+
+    Returns:
+        predictions (array-like): Predicted values for the test data.
+    """
+    # # Fit the ARMA model
+    # model = ARIMA(train_data, order=order)
+    # model_fit = model.fit()
+    # #print(model_fit.mle_retvals)
+    # # Forecast on test data
+    # start = len(train_data)
+    # end = start + 1
+    predictions=np.zeros(len(test_data))
+    for itera in range(0,len(xtest),8):
+        if itera > 0:
+            train_data = np.append(train_data, test_data[itera-8:itera])
+        # Fit the ARMA model
+        model = ARIMA(train_data, order=order)
+        model_fit = model.fit()
+        # print(model_fit.mle_retvals)
+        # Forecast on test data
+        # print(type(xtrainnow))
+        # print(f"xtestnow, {xtestnow}")
+        predictions[itera:itera+8] = model_fit.forecast(steps=8)
+
+
+    return predictions
+
+
+def mean_squared_error(list1, list2):
+    if len(list1) != len(list2):
+        raise ValueError("Lists must be of the same length")
+
+    squared_diffs = [(a - b) ** 2 for a, b in zip(list1, list2)]
+    mse = sum(squared_diffs) / len(squared_diffs)
+    return mse
+
+def grid_search_arma(train_data, p_values, r_values, q_values):
+    best_aic = float('inf')
+    best_order = None
+    best_model = None
+
+    # for p, q, r in itertools.product(p_values, q_values, r_values):
+    #     try:
+    #         model = ARIMA(train_data, order=(p, r, q))
+    #         model_fit = model.fit()
+    #         aic = model_fit.aic
+    #         print(f'ARMA({p},{r},{q}) - AIC: {aic}')
+    #         if aic < best_aic:
+    #             best_aic = aic
+    #             best_order = (p, r, q)
+    #             best_model = model_fit
+    #     except:
+    #         continue
+    #
+    # print(f'Best ARMA Model: ARMA{best_order} - AIC: {best_aic}')
+    return best_model, best_order
+
+xtrain= data_scaled[0][:200]
+xtest= data_scaled[0][200:]
+
+
+from statsmodels.tsa.stattools import adfuller
+
+def check_stationarity(data):
+    result = adfuller(data)
+    print(f'ADF Statistic: {result[0]}')
+    print(f'p-value: {result[1]}')
+    return result[1]
+
+check_stationarity(xtrain)
+from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+for i in range(1,24):
+    if i==5:
+        plot_acf(data_scaled[0], lags=i)  # Adjust `lags` to capture seasonality length
+        plot_pacf(data_scaled[0], lags=i)
+
+plt.plot(range(len(data_scaled[0])),data_scaled[0])
+plt.show()
+xtrainnow = xtrain
+predictionsSHORT=np.zeros(len(xtest))
+counter=0
+#bestorder = grid_search_arma(xtrain[i],range(3), range(3), range(7))[1]
+for j in range(0,17,4):
+    for k in range(3):
+        for l in range(0,5,2):
+                #for n in range(0,15,3):
+                    #for o in range(3):
+                        #for p in range(0,5,2):
+                            predictions = arma_predictor(xtrain,xtest, (j, k, l))
+                            # x = range(len(predictions2))
+                            # # y1 = [1, 4, 9, 16, 25]  # First dataset
+                            # # y2 = [25, 16, 9, 4, 1]  # Second dataset
+                            #
+                            # # Step 1: Plot the first graph
+                            # plt.plot(x, predictions2, label='Graph 1', color='blue', marker='o')
+                            #
+                            # # Step 2: Plot the second graph on the same figure
+                            # plt.plot(x, xtest, label='Graph 2', color='red', marker='x')
+                            #
+                            # # Step 3: Add labels and a title
+                            # plt.xlabel('X-axis')
+                            # plt.ylabel('Y-axis')
+                            # plt.title(f"{j},{k},{l}")
+                            #
+                            # # Step 4: Add a legend to distinguish between the graphs
+                            # plt.legend()
+                            #
+                            # # Step 5: Show the plot
+                            # plt.show()
+                            mse = mean_squared_error(xtest, predictions)
+                            if j==k==l==0:
+                                msemin=mse
+                                mseminorder=(j,k,l)
+                                predictions2=predictions
+                            elif mse<msemin:
+                                msemin=mse
+                                mseminorder=(j,k,l)
+                                predictions2=predictions
+#mse = mean_squared_error(xtest, predictions)
+
+predictions2 = arma_predictorMED(xtrain,xtest, mseminorder)
+
+x = range(len(predictions2))
+                # y1 = [1, 4, 9, 16, 25]  # First dataset
+                # y2 = [25, 16, 9, 4, 1]  # Second dataset
+
+                # Step 1: Plot the first graph
+plt.plot(x, predictions2, label='Predictions', color='blue', marker='o')
+
+                # Step 2: Plot the second graph on the same figure
+plt.plot(x, xtest, label='Actual', color='red', marker='x')
+
+                # Step 3: Add labels and a title
+plt.xlabel('Time')
+plt.ylabel('House prices (normalised)')
+plt.title(f"Performance on unseen data from training city")
+
+                # Step 4: Add a legend to distinguish between the graphs
+plt.legend()
+
+                # Step 5: Show the plot
+plt.show()
+mse = mean_squared_error(xtest, predictions)
+
+for i in range(1,10):
+    xtrain3= data_scaled[i][:200]
+    xtest3= data_scaled[i][200:]
+    #seasord = (3,1,3,mseminorder[3])
+    predictions3=arma_predictor(xtrain3,xtest3,order=mseminorder)
+    mse3=mean_squared_error(xtest3, predictions3)
+    x = range(len(predictions3))
+                    # y1 = [1, 4, 9, 16, 25]  # First dataset
+                    # y2 = [25, 16, 9, 4, 1]  # Second dataset
+
+                    # Step 1: Plot the first graph
+    plt.plot(x, predictions3, label='Prediction', color='blue', marker='o')
+
+                    # Step 2: Plot the second graph on the same figure
+    plt.plot(x, xtest3, label='Actual', color='red', marker='x')
+
+                    # Step 3: Add labels and a title
+    plt.xlabel('Time')
+    plt.ylabel('House prices (normalised)')
+    plt.title(f"Dataset {i+1}")
+
+                    # Step 4: Add a legend to distinguish between the graphs
+    plt.legend()
+
+                    # Step 5: Show the plot
+    plt.show()
+#print(mse)
+#predictions = np.zeros((5, len(xtrain)+len(xtest)))
+#mse = np.zeros(5)
+# print(len(xtrain))
+# print(len(xtest))
+# print(len(xtrain[0]))
+#for i in range(5):
+    #print(train_data.iloc[i,:])
+#print(xtrain[0])
+#print(len(xtest))
+#predictions = arma_predictor(xtrain, xtest, order=(2, 1, 2))
+#for i in range(xtrain):
+    #predictions = arma_predictor(xtrain[i][:], xtest[i][:], order=(2, 1, 2))
+
+#for i in range(predictions):
+    # Evaluate the model
+     #mse[i] = mean_squared_error(test_data, predictions[i,:])
+    #print(f'Mean Squared Error {i}: {mse[i]}')
+
+# x = range(len(predictions))
+# #y1 = [1, 4, 9, 16, 25]  # First dataset
+# #y2 = [25, 16, 9, 4, 1]  # Second dataset
+#
+# # Step 1: Plot the first graph
+# plt.plot(x, predictions, label='Graph 1', color='blue', marker='o')
+#
+# # Step 2: Plot the second graph on the same figure
+# plt.plot(x, xtest[i], label='Graph 2', color='red', marker='x')
+#
+# # Step 3: Add labels and a title
+# plt.xlabel('X-axis')
+# plt.ylabel('Y-axis')
+# plt.title('Two Graphs on the Same Figure')
+#
+# # Step 4: Add a legend to distinguish between the graphs
+# plt.legend()
+#
+# # Step 5: Show the plot
